@@ -1,4 +1,4 @@
-# lonomy_path_controller
+path_controller
 
 ## Overview
 
