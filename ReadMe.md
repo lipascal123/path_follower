@@ -1,4 +1,5 @@
-path_controller
+## path_follower 
+An early version of our first path follower which we used for our ag robot Lonomy to autonomously follow a predefined path through orchards and vineyards.
 
 ## Overview
 
