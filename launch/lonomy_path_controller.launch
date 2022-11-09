@@ -1,0 +1,12 @@
+<launch>
+  <!-- To launch node in simulation: 1 or for real robot: 0 -->
+  <arg name="launch_simulation" default="true"/>
+
+  <node name="lonomy_path_controller" type="lonomy_path_controller_node" pkg="lonomy_path_controller" output="screen" >
+    <rosparam file="$(find lonomy_path_controller)/config/config.yaml" command="load"/>
+    <rosparam file="$(find lonomy_teach_path)/config/config.yaml" command="load" />
+    <!--load arg to ros params server -->
+    <rosparam param="simulation" subst_value="True">$(arg launch_simulation) </rosparam>
+  </node>
+
+</launch>

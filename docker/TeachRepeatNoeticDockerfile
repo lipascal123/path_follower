@@ -1,0 +1,133 @@
+# First build stage, won't persist in the final image
+FROM nvidia_noetic:latest as intermediate
+
+# install git
+RUN apt-get update
+RUN apt-get install -y git
+
+ARG SSH_PRIVATE_KEY
+RUN mkdir ~/.ssh/
+RUN echo "${SSH_PRIVATE_KEY}" > ~/.ssh/id_ed25519
+RUN chmod 600 ~/.ssh/id_ed25519
+RUN ssh-keyscan gitlab.ethz.ch >> ~/.ssh/known_hosts
+RUN ssh-keyscan gitlab.com >> ~/.ssh/known_hosts
+
+# Clone privat lonomy repos via SSH
+RUN  git clone -b pascal/test_simulation git@gitlab.com:lonomy/lonomy_navigation.git \
+  && git clone -b jetson git@gitlab.ethz.ch:rowesys/rowesys_navigation.git \
+  && git clone -b jetson git@gitlab.ethz.ch:rowesys/rowesys_base.git \
+  && git clone -b message git@gitlab.ethz.ch:rowesys/rowesys_pi.git
+
+# Run the block below if you don't have access to the leggedrobotics pkgs
+# These are repos that were copied to lonomy gitlab as they are closed source
+RUN  git clone git@gitlab.com:lonomy/lonomyexternal/any_tools.git \
+  && git clone git@gitlab.com:lonomy/lonomyexternal/basic_filters.git \
+  && git clone git@gitlab.com:lonomy/lonomyexternal/compslam_se.git \
+  && git clone git@gitlab.com:lonomy/lonomyexternal/robot_utils.git
+
+# Run the block below if you have access to the leggedrobotics pkgs
+# RUN  git clone git@bitbucket.org:leggedrobotics/any_tools.git \
+#   && git clone git@bitbucket.org:leggedrobotics/basic_filters.git \
+#   && git clone -b timo/rowesys_suggestions git@bitbucket.org:leggedrobotics/compslam_se.git \
+#   && git clone git@bitbucket.org:leggedrobotics/robot_utils.git
+
+# This is a hack to just get the piksi_rtk_msgs and not the entire repo as it does not compile
+RUN git clone https://github.com/ethz-asl/ethz_piksi_ros.git 
+
+
+FROM nvidia_noetic:latest
+ 
+# Change the default shell to Bash
+SHELL [ "/bin/bash" , "-c" ]
+ 
+# Install git
+RUN apt-get update && apt-get install -y git
+ 
+# Install apt pkgs
+RUN apt-get install -y --no-install-recommends ros-noetic-catkin python3-catkin-tools
+RUN apt-get install -y --no-install-recommends build-essential
+RUN apt-get install -y --no-install-recommends doxygen
+RUN apt-get install -y --no-install-recommends libnotify-dev
+RUN apt-get install -y --no-install-recommends ros-noetic-sound-play
+
+# Create catkin workspace and clone git repos into workspace
+RUN source /opt/ros/noetic/setup.bash \
+  && mkdir -p /catkin_ws/src \
+  && cd /catkin_ws \
+  && catkin init \
+  && catkin config --cmake-args -DCMAKE_BUILD_TYPE=Release \
+  && cd src \
+  # eth open source repos
+  && git clone https://github.com/ANYbotics/any_node.git \
+  && git clone https://github.com/ANYbotics/signal_logger.git \
+  && git clone https://github.com/leggedrobotics/soem_interface.git \
+  && git clone https://github.com/ANYbotics/parameter_handler.git \
+  && git clone https://github.com/ANYbotics/kindr.git \
+  && git clone https://github.com/ANYbotics/kindr_ros.git  \
+  && git clone https://github.com/ANYbotics/message_logger.git \
+  # other
+  && git clone https://github.com/catkin/catkin_simple.git \
+  && git clone https://github.com/ethz-asl/libsbp_catkin.git
+
+COPY --from=intermediate /ethz_piksi_ros /ethz_piksi_ros
+RUN mkdir /catkin_ws/src/ethz_piksi_ros && ln -s /ethz_piksi_ros/piksi_rtk_msgs /catkin_ws/src/ethz_piksi_ros/
+
+# lonomy navigation
+COPY --from=intermediate /lonomy_navigation /lonomy_navigation 
+RUN mkdir /catkin_ws/src/lonomy_navigation/ &&  ln -s  /lonomy_navigation/lonomy_estimator_graph /catkin_ws/src/lonomy_navigation/ \
+  && ln -s /lonomy_navigation/lonomy_path_controller/ /catkin_ws/src/lonomy_navigation/ \
+  && ln -s /lonomy_navigation/lonomy_teach_path/ /catkin_ws/src/lonomy_navigation/
+
+# rowesys navigation
+COPY --from=intermediate /rowesys_navigation /rowesys_navigation 
+RUN mkdir /catkin_ws/src/rowesys_navigation/ \
+  && ln -s /rowesys_navigation/rowesys_joy_manager /catkin_ws/src/rowesys_navigation/ \
+  && ln -s /rowesys_navigation/rowesys_launch/ /catkin_ws/src/rowesys_navigation/ \
+  && ln -s /rowesys_navigation/rowesys_lights/ /catkin_ws/src/rowesys_navigation/ \
+  && ln -s /rowesys_navigation/rowesys_navigation_msgs/ /catkin_ws/src/rowesys_navigation/ \
+  && ln -s /rowesys_navigation/rowesys_sounds/ /catkin_ws/src/rowesys_navigation/ \
+  && ln -s /rowesys_navigation/rowesys_turn/ /catkin_ws/src/rowesys_navigation/ 
+
+# rowesys base
+COPY --from=intermediate /rowesys_base /rowesys_base 
+RUN mkdir /catkin_ws/src/rowesys_base/ \
+  && ln -s /rowesys_base/elmo_ethercat_sdk/ /catkin_ws/src/rowesys_base/ \
+  && ln -s /rowesys_base/rowesys_ackermann_steering_controller/ /catkin_ws/src/rowesys_base/ \
+  && ln -s /rowesys_base/rowesys_base_gazebo/ /catkin_ws/src/rowesys_base/ \
+  && ln -s /rowesys_base/rowesys_base_msgs/ /catkin_ws/src/rowesys_base/ \
+  && ln -s /rowesys_base/rowesys_control/ /catkin_ws/src/rowesys_base/ \
+  && ln -s /rowesys_base/rowesyscpp/ /catkin_ws/src/rowesys_base/ \
+  && ln -s /rowesys_base/rowesys_description/ /catkin_ws/src/rowesys_base/ \
+  && ln -s /rowesys_base/rowesys_emergency_controller/ /catkin_ws/src/rowesys_base/ \
+  && ln -s /rowesys_base/rowesys_hardware_interface/ /catkin_ws/src/rowesys_base/ \
+  && ln -s /rowesys_base/rowesys_swerve_steering_controller/ /catkin_ws/src/rowesys_base/ 
+
+# rowesys pi
+COPY --from=intermediate /rowesys_pi /rowesys_pi
+RUN mkdir /catkin_ws/src/rowesys_pi/ \
+  && ln -s /rowesys_pi/rowesys_pi_msgs /catkin_ws/src/rowesys_pi
+
+
+# lonomy external or eth closed source pkgs
+COPY --from=intermediate /any_tools /any_tools
+RUN  ln -s /any_tools/ /catkin_ws/src/
+COPY --from=intermediate /basic_filters /basic_filters
+COPY --from=intermediate /compslam_se /compslam_se
+COPY --from=intermediate /robot_utils /robot_utils
+RUN  ln -s /basic_filters/ /catkin_ws/src/ \
+  && ln -s /compslam_se/ /catkin_ws/src/ \
+  && ln -s /robot_utils/ /catkin_ws/src/ 
+
+
+ 
+# Build the Catkin workspace and ensure it's sourced
+RUN source /opt/ros/noetic/setup.bash \
+  && cd catkin_ws \
+  && catkin build
+RUN echo "source /catkin_ws/devel/setup.bash" >> ~/.bashrc
+# RUN echo "export ROS_MASTER_URI=http://192.168.1.162:11311" >> ~/.bashrc
+# RUN echo "export ROS_IP=192.168.1.138" >> ~/.bashrc
+RUN source /catkin_ws/devel/setup.bash
+
+# Set the working folder at startup
+WORKDIR /catkin_ws

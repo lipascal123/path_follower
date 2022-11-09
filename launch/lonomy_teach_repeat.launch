@@ -1,0 +1,34 @@
+<launch>
+
+  <!-- To launch node in simulation: 1 or for real robot: 0 -->
+  <arg name="launch_simulation" default="true"/>
+  <!-- To either launch teach or repead mode  -->
+  <arg name="repeat_mode" default="true"/>
+  <!-- With or Without obstacle detection -->
+  <arg name="obstacle_detection" default="true"/>
+  
+  <!-- Start simulation -->
+  <group if="$(arg launch_simulation)">
+    <include file="$(find rowesys_launch)/launch/rowesys_robot_simulation.launch" />
+  </group>
+
+  <!-- Start TEACH PATH node if repeat_mode is false-->
+  <group unless="$(arg repeat_mode)" >
+    <node name="lonomy_teach_path" type="lonomy_teach_path_node" pkg="lonomy_teach_path" output="screen" >
+        <rosparam file="$(find lonomy_teach_path)/config/config.yaml" command="load" />
+        <rosparam param="simulation" subst_value="True">$(arg launch_simulation) </rosparam>
+    </node>
+  </group>
+
+  <!-- Start PATH FOLLOWING node if repeat_mode is true-->
+  <group if="$(arg repeat_mode)" >
+    <node name="lonomy_path_controller" type="lonomy_path_controller_node" pkg="lonomy_path_controller" output="screen" launch-prefix="gdb -ex run - -args">
+      <rosparam file="$(find lonomy_path_controller)/config/config.yaml" command="load"/>
+      <!--load arg to ros params server -->
+      <rosparam param="simulation" subst_value="True">$(arg launch_simulation) </rosparam>
+    </node>
+  </group>
+
+</launch>
+
+ <!-- launch-prefix="gdb -ex run - -args" -->
